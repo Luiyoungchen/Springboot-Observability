@@ -1,0 +1,20 @@
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: springboot-observability
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus, metrics
+  endpoint:
+    health:
+      show-details: never
+  prometheus:
+    metrics:
+      export:
+        enabled: true

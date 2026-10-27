@@ -1,0 +1,37 @@
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "springboot_logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/springboot-app"
+    action        = "keep"
+  }
+
+  rule {
+    target_label = "job"
+    replacement  = "springboot"
+  }
+
+  rule {
+    target_label = "service_name"
+    replacement  = "springboot-observability"
+  }
+}
+
+loki.source.docker "springboot" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.springboot_logs.output
+  forward_to = [loki.write.local.receiver]
+  labels     = { source = "docker" }
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
