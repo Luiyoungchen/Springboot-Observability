@@ -54,27 +54,30 @@ The Dockerfile uses a multi-stage build: Maven with Eclipse Temurin 21 builds th
 Springboot-observability/
 ├── src/
 │   └── main/
-│       ├── java/com/angamba/observability/
-│       │   ├── ObservabilityApplication.java
-│       │   └── ObservabilityController.java
+│       ├── java/
+│       │   └── com/angamba/observability/
+│       │       ├── ObservabilityApplication.java
+│       │       ├── ObservabilityController.java
+│       │       └── Controller/
+│       │           ├── WeatherController.java
+│       │           └── ExchangeController.java
 │       └── resources/
 │           └── application.yml
 ├── prometheus/
 │   └── prometheus.yml
-├── loki/
-│   └── loki-config.yml
-├── alloy/
-│   └── config.alloy
 ├── grafana/
 │   └── provisioning/
 │       └── datasources/
 │           └── datasources.yml
+├── loki/
+│   └── loki-config.yml
+├── alloy/
+│   └── config.alloy
 ├── Dockerfile
-├── .dockerignore
 ├── docker-compose.yml
+├── .dockerignore
+├── .gitignore
 ├── pom.xml
-├── mvnw
-├── mvnw.cmd
 └── README.md
 ```
 
@@ -82,13 +85,15 @@ Your exact source filenames may differ slightly. Keep the paths referenced by `d
 
 ## 4. Application endpoints
 
-| Endpoint | Purpose |
-|---|---|
-| `/` | Returns a JSON response confirming that the application is running |
-| `/slow` | Simulates a slow request by waiting approximately two seconds; useful for testing response-time behavior |
-| `/actuator/health` | Reports application health |
-| `/actuator/metrics` | Lists available Micrometer metrics |
-| `/actuator/prometheus` | Exposes metrics in Prometheus format |
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/` | Returns application information |
+| GET | `/slow` | Simulates a slow response for latency monitoring |
+| GET | `/api/weather?city=Guwahati` | Retrieves current weather information |
+| GET | `/api/exchange?base=USD&target=INR` | Retrieves a currency exchange rate |
+| GET | `/actuator/health` | Reports application health |
+| GET | `/actuator/metrics` | Lists available application metrics |
+| GET | `/actuator/prometheus` | Exposes Prometheus metrics |
 
 Try these URLs after starting the application:
 
@@ -97,6 +102,8 @@ Try these URLs after starting the application:
 - [Health endpoint](http://localhost:8080/actuator/health)
 - [Metrics endpoint](http://localhost:8080/actuator/metrics)
 - [Prometheus metrics](http://localhost:8080/actuator/prometheus)
+- [Weather Api](http://localhost:8080/api/weather?city=Guwahati)
+- [Exchange Api](http://localhost:8080/api/exchange?base=USD&target=INR)
 
 The `application.yml` configuration used in this project is:
 
@@ -458,3 +465,83 @@ docker compose up -d --build
 - [Grafana Alloy Docker logging](https://grafana.com/docs/alloy/latest/collect/logs-infrastructure/docker/)
 
 ---
+### Now We will try to add two new services by making apis
+## (a) weather Api
+  1. Create a new Java file
+Inside src/main/java/com/angamba/observability/, create a package named controller, then create:
+
+WeatherController.java
+
+CHECKING:
+To run the spring: .\mvnw.cmd spring-boot:run
+
+Go the new tab, and type localhost:8080/api/weather?city=Guwahati, localhost:8080/api/weather?city=Mumbai
+
+To check in promatheus: Stop the spring and start the docker; docker compose up -d --build
+Then go the new tab, and type localhost:9090/
+
+Open the Query:
+http_server_requests_seconds_count{uri="/api/weather"} //number of requests made to the Weather API.
+
+1000 *
+sum(rate(http_server_requests_seconds_sum{uri="/api/weather"}[5m]))   
+/
+sum(rate(http_server_requests_seconds_count{uri="/api/weather"}[5m]))
+//returns average response time in milliseconds over the last five minutes.
+
+Now to Display in Grafana:
+Open Grafana, then edit your existing dashboard and add a panel.
+
+Use these settings:
+Setting	Value
+Data source	Prometheus
+Panel title	Weather API — Request Rate
+Query	sum(rate(http_server_requests_seconds_count{uri="/api/weather"}[5m]))
+Visualization	Time series
+
+Add a second panel titled Weather API — Average Response Time using the latency query above. Set the unit to milliseconds (ms).
+
+You can also view Weather API logs in Grafana Explore with this LogQL query:
+{service_name="springboot-observability"} |= "Weather API"
+
+## (b)Currency Exchange
+  1. Create a new Java file
+Inside src/main/java/com/angamba/observability/, create a package named controller, then create:
+
+ExchangeController.java
+CHECKING:
+To run the spring: .\mvnw.cmd spring-boot:run
+
+Go the new tab, and type localhost:8080/api/exchange?base=EUR&target=INR, localhost:8080/api/exchange?base=GBP&target=INR
+
+To check in promatheus: Stop the spring and start the docker; docker compose up -d --build
+Then go the new tab, and type localhost:9090/
+
+Open the Query:
+sum(rate(http_server_requests_seconds_count{uri="/api/exchange"}[5m])) //Request Rate.
+
+1000 *
+sum(rate(http_server_requests_seconds_sum{uri="/api/exchange"}[5m]))
+/
+sum(rate(http_server_requests_seconds_count{uri="/api/exchange"}[5m]))
+//Average Latency
+
+{service_name="springboot-observability"} |= "Exchange API" //log
+
+
+## Add a combined request-rate panel
+In Grafana at http://localhost:3001:
+1. Open your existing dashboard.
+2. Select Add → Visualization.
+3. Choose the Prometheus data source.
+4. Paste this query:
+sum by (uri) (
+  rate(http_server_requests_seconds_count{
+    uri=~"/|/slow|/api/weather|/api/exchange"
+  }[5m])
+)
+
+
+5. Set the visualization to Time series.
+6. Set the title to API Request Rate by Endpoint.
+7. Click Apply and save the dashboard.
