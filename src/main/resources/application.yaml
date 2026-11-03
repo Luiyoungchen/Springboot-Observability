@@ -18,3 +18,20 @@ management:
     metrics:
       export:
         enabled: true
+
+app:
+  schedulers:
+    weather:
+      city: Guwahati
+      fixed-delay: 60000
+
+    exchange:
+      base: USD
+      target: INR
+      fixed-delay: 60000      
+
+    heartbeat:
+      fixed-delay: 2000
+
+    date-generator:
+      fixed-delay: 10000
