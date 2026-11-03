@@ -633,3 +633,122 @@ Then browse to `http://localhost:3002`.
 Kubernetes. It is not a production cluster deployment. The Docker
 Compose environment is documented separately and is not managed by this
 README.
+
+## Daily Start and Stop Procedure
+
+Once the Kubernetes resources have been created, you do **not** need to
+run `docker run` or rebuild the Docker image every time you want to use
+the application. Kubernetes manages the containers from the Deployments.
+You only need Docker Desktop running because the local Kubernetes cluster
+runs through Docker Desktop.
+
+### Start the services
+
+1. Open **Docker Desktop** and wait until Kubernetes is running.
+2. Open PowerShell in the project folder:
+
+   ```powershell
+   cd C:\Users\hp\Desktop\Springboot-observability
+   ```
+
+3. Confirm that `kubectl` is connected to Docker Desktop Kubernetes:
+
+   ```powershell
+   kubectl config current-context
+   ```
+
+   The expected context is `docker-desktop`.
+
+4. Check the existing workloads:
+
+   ```powershell
+   kubectl get pods -n observability
+   kubectl get deployments -n observability
+   ```
+
+   If the Pods show `Running` and are ready, the services are already
+   started. You do not need to apply the manifests again.
+
+5. If you previously scaled the Deployments down to zero replicas, start
+   them again:
+
+   ```powershell
+   kubectl scale deployment --all --replicas=1 -n observability
+   ```
+
+   Then check their status:
+
+   ```powershell
+   kubectl get pods -n observability
+   ```
+
+6. To open Grafana on your computer, start this port-forward command in
+   a PowerShell window and leave that window open:
+
+   ```powershell
+   kubectl port-forward svc/grafana-service 3002:3000 -n observability
+   ```
+
+   Open `http://localhost:3002` in your browser.
+
+7. To call the Spring Boot API from your computer, open a **separate**
+   PowerShell window and run:
+
+   ```powershell
+   kubectl port-forward svc/springboot-service 8080:8080 -n observability
+   ```
+
+   For example, in another PowerShell window you can test the endpoint:
+
+   ```powershell
+   Invoke-RestMethod -Method Get -Uri "http://localhost:8080/api/date-generator"
+   ```
+
+   Keep each port-forward window open while you use the corresponding
+   local address. Port-forwarding is a temporary connection; repeat the
+   command after restarting your computer or closing that terminal.
+
+### Do I need to run Docker every time?
+
+- **Docker Desktop:** Yes. It must be open and Kubernetes must be
+  running for this local cluster to work.
+- **`docker run`:** No. Kubernetes starts the containers using the
+  existing Deployments; you do not manually run each container.
+- **`docker build`:** No, not for normal starts. Rebuild only when you
+  change the Spring Boot application and need a new image.
+- **`kubectl apply`:** No, not for normal starts. Use it when creating
+  resources for the first time, restoring resources that were deleted,
+  or applying changes to Kubernetes manifest files.
+- **Port-forward:** Start it whenever you need to access Grafana or the
+  Spring Boot API through `localhost`. Each port-forward command needs
+  its own running terminal window.
+
+### Optional: stop the services without deleting them
+
+To stop the Kubernetes application workloads while keeping the
+Deployments and other Kubernetes resource definitions, scale the
+Deployments to zero:
+
+```powershell
+kubectl scale deployment --all --replicas=0 -n observability
+```
+
+To start them again later:
+
+```powershell
+kubectl scale deployment --all --replicas=1 -n observability
+```
+
+You can also stop an individual port-forward by pressing `Ctrl+C` in its
+PowerShell window. Scaling Deployments to zero stops the Pods, but does
+not delete the Deployments or PVC objects. Do not delete PVCs if you want
+to retain the data stored in the persistent volumes.
+
+When you shut down your computer, Docker Desktop and its Kubernetes
+cluster stop. After starting Docker Desktop again, check the Pods as
+shown above. Existing Deployments normally bring their Pods back up; if
+they are already running, no scale or apply command is needed.
+
+**Important:** Do not delete the `observability` namespace as a routine
+stop procedure. Deleting the namespace removes its namespaced resources
+and can put persistent application data at risk.
